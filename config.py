@@ -47,13 +47,28 @@ class Config:
                           nn.BatchNorm1d(16),
                           nn.ReLU(),
                           nn.Linear(16, 1),
-                          nn.Sigmoid()),
-
+                          nn.Sigmoid()
+                          ),
+                          
             nn.Sequential(nn.Linear(5, 16),
                           nn.BatchNorm1d(16),
                           nn.ReLU(),
                           nn.Linear(16, 1),
                           nn.Softplus()
+                          ),
+
+            nn.Sequential(nn.Linear(4, 16),
+                          nn.BatchNorm1d(16),
+                          nn.ReLU(),
+                          nn.Linear(16, 1),
+                          nn.Sigmoid()
+                          ),
+
+            nn.Sequential(nn.Linear(4, 128),
+                          nn.ReLU(),
+                          nn.Linear(128, 32),
+                          nn.ReLU(),
+                          nn.Linear(32, 1)
                           ),
         ],
         "train_params": {
@@ -75,7 +90,10 @@ class Config:
             "odds_weight_decay": 0.0,
             "selection_weight_decay": 0.0,
             "r0_weight_decay": 0.0,
-            "r1_weight_decay": 0.0
+            "r1_weight_decay": 0.0,
+            "S1_weight_decay": 0.0,
+            "S0_weight_decay": 0.0,
+            "y_weight_decay": 0.0
         }
     }
     experiment_num = 50

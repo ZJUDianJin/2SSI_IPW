@@ -41,6 +41,9 @@ class TSSITrainer(object):
         self.r0_weight_decay: float = train_params["r0_weight_decay"]
         self.s1_weight_decay: float = train_params["s1_weight_decay"]
         self.odds_weight_decay: float = train_params["odds_weight_decay"]
+        self.S1_weight_decay: float = train_params["S1_weight_decay"]
+        self.S0_weight_decay: float = train_params["S0_weight_decay"]
+        self.y_weight_decay: float = train_params["y_weight_decay"]
 
         # build networks
         self.treatment_net: nn.Module = networks[0]
@@ -52,6 +55,8 @@ class TSSITrainer(object):
         self.phi_net: nn.Module = networks[6]
         self.s1_net: nn.Module = networks[7]
         self.odds_net: nn.Module = networks[8]
+        self.S1_net: nn.Module = networks[9]
+        self.y_net: nn.Module = networks[10]
 
         if self.gpu_flg:
             self.treatment_net.to("cuda:0")
@@ -64,13 +69,18 @@ class TSSITrainer(object):
             self.phi_net.to("cuda:0")
             self.s1_net.to("cuda:0")
             self.odds_net.to("cuda:0")
-
+            self.S1_net.to("cuda:0")
+            self.y_net.to("cuda:0")
+        
+        # 创建adam优化器
         self.treatment_opt = torch.optim.Adam(self.treatment_net.parameters(),
                                               weight_decay=self.treatment_weight_decay)
         self.instrumental_opt = torch.optim.Adam(self.instrumental_net.parameters(),
                                                  weight_decay=self.instrumental_weight_decay)
         self.s1_opt = torch.optim.Adam(chain(self.s1_net.parameters(), self.phi_net.parameters()),
                                        weight_decay=self.s1_weight_decay)
+        self.S1_opt = torch.optim.Adam(self.S1_net.parameters(),
+                                       weight_decay=self.S1_weight_decay)
 
         if self.covariate_net:
             self.covariate_opt = torch.optim.Adam(self.covariate_net.parameters(),
@@ -90,6 +100,7 @@ class TSSITrainer(object):
         oos_result : float
             The performance of model evaluated by oos
         """
+        # 加载数据集
         train_data, unselected_train_data, test_data, unselected_test_data = demand(Config.sample_num * 10,
                                                                                         rand_seed)
         train_1st_t, train_2nd_t, train_3rd_t = concat_dataset(train_data,
@@ -106,22 +117,23 @@ class TSSITrainer(object):
             test_data_t = test_data_t.to_gpu()
             unselected_test_data_t = unselected_test_data_t.to_gpu()
 
+        # 调整正则化超参数，与数据规模成比例
         self.lam1 *= train_1st_t[0].size()[0]
         self.lam2 *= train_2nd_t[0].size()[0]
         self.lam3 *= train_3rd_t[0].size()[0]
         writer = SummaryWriter()
-        for t in range(self.n_epoch):
+        for t in range(self.n_epoch): # 2SIS
             self.stage1_update(train_1st_t, t, writer)
             if self.covariate_net:
                 self.update_covariate_net(train_1st_t, train_2nd_t, t, writer)
             self.stage2_update(train_1st_t, train_2nd_t, t, writer)
         writer.close()
         mdl = TSSIModel(self.treatment_net, self.instrumental_net, self.selection_net,
-                        self.covariate_net, self.r1_net, self.r0_net, self.odds_net, self.phi_net,
+                        self.covariate_net, self.r1_net, self.r0_net, self.odds_net, self.phi_net, self.S1_net, self.y_net,
                         self.add_stage1_intercept, self.add_stage2_intercept,
                         self.odds_iter, self.selection_weight_decay,
-                        self.r1_weight_decay, self.r0_weight_decay, self.odds_weight_decay)
-        mdl.fit_t(train_1st_t, train_2nd_t, train_3rd_t, self.lam1, self.lam2, self.lam3)
+                        self.r1_weight_decay, self.r0_weight_decay, self.odds_weight_decay, self.y_weight_decay)
+        mdl.fit_t(train_1st_t, train_2nd_t, train_3rd_t, self.lam1, self.lam2, self.lam3) # shadow variable -> Selection Bias
 
         if self.gpu_flg:
             torch.cuda.empty_cache()
@@ -135,43 +147,72 @@ class TSSITrainer(object):
         self.instrumental_net.train(True)
         self.phi_net.train(True)
         self.s1_net.train(True)
+        self.S1_net.train(False)
         bce_func = nn.BCELoss()
         if self.covariate_net:
             self.covariate_net.train(False)
-        mi_estimator = eval("CLUB")(self.distance_dim, self.distance_dim, self.distance_dim * 2)
+        mi_estimator = eval("CLUB")(self.distance_dim, self.distance_dim, self.distance_dim * 2) # 
         if self.gpu_flg:
             mi_estimator = mi_estimator.to("cuda:0")
-        mi_optimizer = torch.optim.Adam(mi_estimator.parameters(), lr=1e-4)
-        treatment_feature = self.treatment_net(train_1st_t.treatment).detach()
+        mi_optimizer = torch.optim.Adam(mi_estimator.parameters(), lr=1e-4) #  
+        treatment_feature = self.treatment_net(train_1st_t.treatment).detach() # 获得t
         for i in range(self.stage1_iter):
             self.instrumental_opt.zero_grad()
-            instrumental_feature = self.instrumental_net(train_1st_t.instrumental)
+            instrumental_feature = self.instrumental_net(train_1st_t.instrumental) # 获得z
             feature_t = TSSIModel.augment_stage1_feature(instrumental_feature,
-                                                         self.add_stage1_intercept)
+                                                         self.add_stage1_intercept) # 获得t的回归特征，特征增强，在特征中添加截距项
             loss_t = linear_reg_loss(treatment_feature, feature_t, self.lam1)
-            loss_t.backward()
-            self.instrumental_opt.step()
+            loss_t.backward() 
+            weight = fit_linear(treatment_feature, feature_t, self.lam1)
+            pred = linear_reg_pred(feature_t, weight)
+            # print(torch.cat((treatment_feature, pred), 1))
+            # print(loss_t)
+            self.instrumental_opt.step() # 计算并更新权重
             writer.add_scalar('InstrumentalNet Train loss', loss_t, epoch * self.stage1_iter + i)
-            for j in range(self.mi_iter):
+            for j in range(self.mi_iter): # 学习互信息估计器
                 mi_estimator.train(True)
-                phi_feature = self.phi_net(train_1st_t.instrumental)
-                mi_loss = mi_estimator.learning_loss(phi_feature, train_1st_t.treatment)
+                phi_feature = self.phi_net(train_1st_t.instrumental) 
+                mi_loss = mi_estimator.learning_loss(phi_feature, train_1st_t.treatment) 
                 mi_optimizer.zero_grad()
                 mi_loss.backward()
                 mi_optimizer.step()
-            mi_estimator.train(False)
-            phi_feature = self.phi_net(train_1st_t.instrumental)
-            s_pred = self.s1_net(torch.cat((train_1st_t.treatment, train_1st_t.covariate, phi_feature), 1))
-            loss_s = bce_func(s_pred, train_1st_t.selection) + self.lam4 * mi_estimator(phi_feature, train_1st_t.treatment)
+            mi_estimator.train(False) 
+            phi_feature = self.phi_net(train_1st_t.instrumental) 
+            s_pred = self.s1_net(torch.cat((train_1st_t.treatment, train_1st_t.covariate, phi_feature), 1)) # fs(x, t, phi)
+            loss_s = bce_func(s_pred, train_1st_t.selection) + self.lam4 * mi_estimator(phi_feature, train_1st_t.treatment) # 提升phi对s的推理能力 + 使得phi和t独立
             self.s1_opt.zero_grad()
             loss_s.backward()
-            self.s1_opt.step()
+            self.s1_opt.step() # 更新s1_net和phi_net
             writer.add_scalar('Phi Train loss', loss_s, epoch * self.stage1_iter + i)
+        s_pred = self.s1_net(torch.cat((train_1st_t.treatment, train_1st_t.covariate, phi_feature), 1)).detach()
+
+            
+        self.s1_net.train(False)
+        self.phi_net.train(False)
+        self.instrumental_net.train(False)
+        self.S1_net.train(True)
+        # train f(x, t, z)
+        for i in range(self.stage1_iter):
+            phi_feature = self.phi_net(train_1st_t.instrumental).detach()
+            S1_pred = self.S1_net(torch.cat((train_1st_t.treatment, train_1st_t.covariate, phi_feature), 1))
+            loss_S1 = bce_func(S1_pred, train_1st_t.selection)
+            self.S1_opt.zero_grad()
+            loss_S1.backward()
+            self.S1_opt.step()
+            writer.add_scalar('S1 Train loss', loss_S1, epoch * self.stage1_iter + i)
+        self.S1_net.train(False)
+        S1_pred = self.S1_net(torch.cat((train_1st_t.treatment, train_1st_t.covariate, phi_feature), 1)).detach()
+        # print(S1_pred)
+
+
 
     def stage2_update(self, train_1st_t: TrainDataSetTorch, train_2nd_t: TrainDataSetTorch, epoch: int, writer: SummaryWriter):
         self.treatment_net.train(True)
         self.instrumental_net.train(False)
         self.phi_net.train(False)
+        self.S1_net.train(False)
+        self.y_net.train(False)
+
         if self.covariate_net:
             self.covariate_net.train(False)
 
@@ -216,28 +257,29 @@ class TSSITrainer(object):
         treatment_2nd_feature = self.treatment_net(train_2nd_data.treatment).detach()
 
         feature = TSSIModel.augment_stage1_feature(instrumental_1st_feature, self.add_stage1_intercept)
-        stage1_weight = fit_linear(treatment_1st_feature, feature, self.lam1)
+        stage1_weight = fit_linear(treatment_1st_feature, feature, self.lam1) # 用z估计t的权重
 
-        # residual for stage 2
-        feature = TSSIModel.augment_stage1_feature(instrumental_2nd_feature,
-                                                   self.add_stage1_intercept)
-        predicted_treatment_feature = linear_reg_pred(feature, stage1_weight).detach()
+        feature = TSSIModel.augment_stage1_feature(instrumental_2nd_feature, self.add_stage1_intercept)
+        predicted_treatment_feature = linear_reg_pred(feature, stage1_weight).detach() # 预测值t
         residual_2nd_feature = treatment_2nd_feature - predicted_treatment_feature
 
         self.covariate_net.train(True)
         self.phi_net.train(False)
         phi_feature = self.phi_net(train_2nd_data.instrumental).detach()
-        condition_feature = torch.concat((residual_2nd_feature, phi_feature), 1)
-        for i in range(self.covariate_iter):
+        
+        for i in range(self.covariate_iter): # 回归Y
             self.covariate_opt.zero_grad()
             covariate_feature = self.covariate_net(train_2nd_data.covariate)
             # stage2 - y1 regression
-            feature = TSSIModel.augment_stage_y1_feature(treatment_2nd_feature,
-                                                         condition_feature,
+            feature = TSSIModel.augment_stage_y1_feature_plus(predicted_treatment_feature,
+                                                         phi_feature,
                                                          covariate_feature,
                                                          self.add_stage2_intercept)
-
             loss = linear_reg_loss(train_2nd_data.outcome, feature, self.lam2)
+            weight = fit_linear(train_2nd_data.outcome, feature, self.lam2)
+            pred = linear_reg_pred(feature, weight)
+            print(torch.cat((train_2nd_data.outcome, pred), 1))
+            print(loss)
             loss.backward()
             self.covariate_opt.step()
             writer.add_scalar('CovariateNet Train loss', loss, epoch * self.stage1_iter + i)

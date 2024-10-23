@@ -1,6 +1,7 @@
 import torch
 
 
+# 岭回归
 def fit_linear(target: torch.Tensor,
                feature: torch.Tensor,
                reg: float = 0.0):
@@ -34,7 +35,7 @@ def fit_linear(target: torch.Tensor,
         weight = torch.einsum("de,d...->e...", A_inv, b)
     return weight
 
-
+# 输入特征、权重，输出预测值
 def linear_reg_pred(feature: torch.Tensor, weight: torch.Tensor):
     assert weight.dim() >= 2
     if weight.dim() == 2:
@@ -42,13 +43,21 @@ def linear_reg_pred(feature: torch.Tensor, weight: torch.Tensor):
     else:
         return torch.einsum("nd,d...->n...", feature, weight)
 
-
+# core 计算线性回归损失函数，加入了权重的正则化项
 def linear_reg_loss(target: torch.Tensor,
                     feature: torch.Tensor,
                     reg: float):
     weight = fit_linear(target, feature, reg)
     pred = linear_reg_pred(feature, weight)
     return torch.norm((target - pred)) ** 2 + reg * torch.norm(weight) ** 2
+
+def linear_reg_loss_weight(target: torch.Tensor,
+                    feature: torch.Tensor,
+                    weight: torch.Tensor,
+                    reg: float):
+    weight = fit_linear(target, feature, reg)
+    pred = linear_reg_pred(feature, weight)
+    return weight * torch.norm((target - pred)) ** 2 + reg * torch.norm(weight) ** 2
 
 
 def outer_prod(mat1: torch.Tensor, mat2: torch.Tensor):
