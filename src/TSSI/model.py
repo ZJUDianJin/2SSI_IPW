@@ -434,6 +434,7 @@ class TSSIModel:
             phi_feature = self.phi_net(instrumental)
         else:
             condition_feature = torch.zeros((len(treatment), self.condition_dim))
+
         feature = TSSIModel.augment_stage_y1_feature(predicted_treatment_feature,
                                                      phi_feature,
                                                      covariate_feature,
@@ -455,4 +456,5 @@ class TSSIModel:
             pred2, pred_linear = self.predict_t_1(test_data.treatment, test_data.covariate, test_data.instrumental, test_data.selection_probability, target)
         res2 = (torch.norm((target - pred2)) ** 2) / target.size()[0]
         res_linear = (torch.norm((target - pred_linear)) ** 2) / target.size()[0]
+        # return res2.detach().cpu().numpy(), res22.detach().cpu().numpy()
         return res1.detach().cpu().numpy(), res2.detach().cpu().numpy(), res_linear.detach().cpu().numpy()
