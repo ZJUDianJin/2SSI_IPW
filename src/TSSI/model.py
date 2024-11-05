@@ -288,7 +288,7 @@ class TSSIModel:
             # loss_y = torch.sum(W * (outcome_2nd_t - outcome_y) ** 2)
             loss_func = nn.MSELoss(reduction='none')
             mse_loss = loss_func(outcome_y, outcome_2nd_t)
-            loss_y = torch.sum(mse_loss)
+            loss_y = torch.sum(W_real * mse_loss)
             loss_y.backward()
             self.y_opt.step()
             writer.add_scalar('Y Train loss', loss_y, e)
