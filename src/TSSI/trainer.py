@@ -273,7 +273,7 @@ class TSSITrainer(object):
 
         feature = TSSIModel.augment_stage1_feature(instrumental_2nd_feature, self.add_stage1_intercept)
         predicted_treatment_feature = linear_reg_pred(feature, stage1_weight).detach() 
-        residual_2nd_feature = treatment_2nd_feature - predicted_treatment_feature 
+
         self.covariate_net.train(True)
         self.phi_net.train(False)
         phi_feature = self.phi_net(train_2nd_data.instrumental).detach()

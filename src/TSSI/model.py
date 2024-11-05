@@ -288,7 +288,7 @@ class TSSIModel:
             # loss_y = torch.sum(W * (outcome_2nd_t - outcome_y) ** 2)
             loss_func = nn.MSELoss(reduction='none')
             mse_loss = loss_func(outcome_y, outcome_2nd_t)
-            loss_y = torch.sum(W_real * mse_loss)
+            loss_y = torch.sum(mse_loss)
             loss_y.backward()
             self.y_opt.step()
             writer.add_scalar('Y Train loss', loss_y, e)
@@ -455,5 +455,4 @@ class TSSIModel:
             pred2, pred_linear = self.predict_t_1(test_data.treatment, test_data.covariate, test_data.instrumental, test_data.selection_probability, target)
         res2 = (torch.norm((target - pred2)) ** 2) / target.size()[0]
         res_linear = (torch.norm((target - pred_linear)) ** 2) / target.size()[0]
-        # return res2.detach().cpu().numpy(), res22.detach().cpu().numpy()
         return res1.detach().cpu().numpy(), res2.detach().cpu().numpy(), res_linear.detach().cpu().numpy()

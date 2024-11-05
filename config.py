@@ -87,20 +87,20 @@ class Config:
                           nn.Sigmoid()
                           ),
             # y_net
-            nn.Sequential(nn.Linear(6, 32),
-                          # nn.ReLU(),
-                          # nn.Linear(128, 32),
+            nn.Sequential(nn.Linear(6, 128),
+                          nn.ReLU(),
+                          nn.Linear(128, 32),
                           nn.BatchNorm1d(32),
                           nn.ReLU(),
                           nn.Linear(32, 1), 
                           ),
             # y1_net
-            nn.Sequential(nn.Linear(6, 32),
+            nn.Sequential(nn.Linear(6, 1),
                           # nn.ReLU(),
                           # nn.Linear(128, 32),
-                          nn.BatchNorm1d(32),
-                          nn.ReLU(),
-                          nn.Linear(32, 1), 
+                          # nn.BatchNorm1d(32),
+                          # nn.ReLU(),
+                          # nn.Linear(32, 1), 
                           ),
         ],
         "train_params": {
