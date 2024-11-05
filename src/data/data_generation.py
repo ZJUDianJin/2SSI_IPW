@@ -66,6 +66,110 @@ def get_images(digit, n, seed=None, testset=False):
     return X_i[perm[0:n], :, :].reshape((n, i * j))
 
 
+# def selection_rule(cause):
+#     b = np.random.randn(len(cause), 1)
+#     w = np.array(
+#         [-0.1] + [0.1] * (cause.shape[1] - 2) + [1 * Config.c_strength]
+#     ).reshape((cause.shape[1], 1))
+#     p = np.dot(cause, w) + b
+#     p = sigmoid(p)
+#     selection_res = np.ones(p.shape)
+#     for i in range(len(selection_res)):
+#         selection_res[i, 0] = np.random.binomial(1, p[i, 0], 1)
+#     return selection_res
+
+
+# def demand(n, seed=1, ynoise=1., pnoise=1., ypcor=0.8, use_images=False, test=False):
+#     rng = np.random.RandomState(seed)
+
+#     # covariates: time and emotion
+#     time = rng.rand(n) * 10
+#     emotion_id = rng.randint(0, 7, size=n)
+#     # emotion = one_hot(emotion_id)
+#     emotion = emotion_id.reshape((-1, 1))
+#     if use_images:
+#         idx = np.argsort(emotion_id)
+#         emotion_feature = np.zeros((0, 28 * 28))
+#         for i in range(7):
+#             img = get_images(i, np.sum(emotion_id == i), seed, test)
+#             emotion_feature = np.vstack([emotion_feature, img])
+#         reorder = np.argsort(idx)
+#         emotion_feature = emotion_feature[reorder, :]
+#     else:
+#         emotion_feature = emotion
+
+#     # random instrument
+#     z = rng.randn(n)
+
+#     # erros
+#     e = rng.randn(n)
+
+#     # z, u -> price
+#     v = rng.randn(n) * pnoise
+#     price = sensf(time) * (z + 3) + 25.
+#     price = price + v
+#     price = (price - pmu) / psd + Config.u_strength * e
+#     price = price.reshape((-1, 1))
+#     # true observable demand function
+#     x = np.concatenate([time.reshape((-1, 1)), emotion_feature], axis=1)
+#     x_latent = np.concatenate([time.reshape((-1, 1)), emotion], axis=1)
+#     g = lambda x, z, p: storeg(x, p)  # doesn't use z
+
+#     # errors
+#     # e = (ypcor * ynoise / pnoise) * v + rng.randn(n) * ynoise * np.sqrt(1 - ypcor ** 2)
+#     e = e.reshape(-1, 1)
+
+#     # response
+#     y = g(x_latent, None, price) + e
+#     gt = g(x_latent, None, price)
+
+#     z = np.concatenate([z.reshape((-1, 1)), x], axis=1)
+
+#     s = selection_rule(np.concatenate([price, z, y], axis=1))
+#     selected_index = np.where(s.reshape(-1) == 1)[0]
+#     new_selected_index = np.random.permutation(selected_index)
+#     new_t = price[new_selected_index]
+#     new_x = x[new_selected_index]
+#     new_z = z[new_selected_index]
+#     new_y = y[new_selected_index]
+#     new_s = s[new_selected_index]
+#     new_gt = gt[new_selected_index]
+#     unselected_index = np.where(s.reshape(-1) == 0)[0]
+#     new_unselected_index = np.random.permutation(unselected_index)
+#     unselected_new_t = price[new_unselected_index]
+#     unselected_new_x = x[new_unselected_index]
+#     unselected_new_z = z[new_unselected_index]
+#     unselected_new_y = y[new_unselected_index]
+#     unselected_new_s = s[new_unselected_index]
+#     unselected_new_gt = gt[new_unselected_index]
+
+#     return TrainDataSet(treatment=new_t[:Config.sample_num * 8 // 10],
+#                         instrumental=new_z[:Config.sample_num * 8 // 10],
+#                         covariate=new_x[:Config.sample_num * 8 // 10],
+#                         outcome=new_y[:Config.sample_num * 8 // 10],
+#                         structural=new_gt[:Config.sample_num * 8 // 10],
+#                         selection=new_s[:Config.sample_num * 8 // 10]
+#                         ), \
+#            TrainDataSet(treatment=unselected_new_t[:Config.sample_num * 8 // 10],
+#                         instrumental=unselected_new_z[:Config.sample_num * 8 // 10],
+#                         covariate=unselected_new_x[:Config.sample_num * 8 // 10],
+#                         outcome=unselected_new_y[:Config.sample_num * 8 // 10],
+#                         structural=unselected_new_gt[:Config.sample_num * 8 // 10],
+#                         selection=unselected_new_s[:Config.sample_num * 8 // 10]
+#                         ), \
+#            TestDataSet(
+#                treatment=new_t[Config.sample_num * 8 // 10:Config.sample_num],
+#                instrumental=new_z[Config.sample_num * 8 // 10:Config.sample_num],
+#                covariate=new_x[Config.sample_num * 8 // 10:Config.sample_num],
+#                structural=new_gt[Config.sample_num * 8 // 10:Config.sample_num]
+#            ), \
+#            TestDataSet(
+#                treatment=unselected_new_t[Config.sample_num * 8 // 10:Config.sample_num],
+#                instrumental=unselected_new_z[Config.sample_num * 8 // 10:Config.sample_num],
+#                covariate=unselected_new_x[Config.sample_num * 8 // 10:Config.sample_num],
+#                structural=unselected_new_gt[Config.sample_num * 8 // 10:Config.sample_num]
+#            )
+
 def selection_rule(cause):
     b = np.random.randn(len(cause), 1)
     w = np.array(
@@ -76,7 +180,7 @@ def selection_rule(cause):
     selection_res = np.ones(p.shape)
     for i in range(len(selection_res)):
         selection_res[i, 0] = np.random.binomial(1, p[i, 0], 1)
-    return selection_res
+    return selection_res, p  # 返回选择结果和概率
 
 
 def demand(n, seed=1, ynoise=1., pnoise=1., ypcor=0.8, use_images=False, test=False):
@@ -85,7 +189,6 @@ def demand(n, seed=1, ynoise=1., pnoise=1., ypcor=0.8, use_images=False, test=Fa
     # covariates: time and emotion
     time = rng.rand(n) * 10
     emotion_id = rng.randint(0, 7, size=n)
-    # emotion = one_hot(emotion_id)
     emotion = emotion_id.reshape((-1, 1))
     if use_images:
         idx = np.argsort(emotion_id)
@@ -101,7 +204,7 @@ def demand(n, seed=1, ynoise=1., pnoise=1., ypcor=0.8, use_images=False, test=Fa
     # random instrument
     z = rng.randn(n)
 
-    # erros
+    # errors
     e = rng.randn(n)
 
     # z, u -> price
@@ -110,13 +213,13 @@ def demand(n, seed=1, ynoise=1., pnoise=1., ypcor=0.8, use_images=False, test=Fa
     price = price + v
     price = (price - pmu) / psd + Config.u_strength * e
     price = price.reshape((-1, 1))
+    
     # true observable demand function
     x = np.concatenate([time.reshape((-1, 1)), emotion_feature], axis=1)
     x_latent = np.concatenate([time.reshape((-1, 1)), emotion], axis=1)
     g = lambda x, z, p: storeg(x, p)  # doesn't use z
 
     # errors
-    # e = (ypcor * ynoise / pnoise) * v + rng.randn(n) * ynoise * np.sqrt(1 - ypcor ** 2)
     e = e.reshape(-1, 1)
 
     # response
@@ -125,7 +228,9 @@ def demand(n, seed=1, ynoise=1., pnoise=1., ypcor=0.8, use_images=False, test=Fa
 
     z = np.concatenate([z.reshape((-1, 1)), x], axis=1)
 
-    s = selection_rule(np.concatenate([price, z, y], axis=1))
+    # 选择规则及其概率
+    s, probabilities = selection_rule(np.concatenate([price, z, y], axis=1))
+    
     selected_index = np.where(s.reshape(-1) == 1)[0]
     new_selected_index = np.random.permutation(selected_index)
     new_t = price[new_selected_index]
@@ -134,6 +239,8 @@ def demand(n, seed=1, ynoise=1., pnoise=1., ypcor=0.8, use_images=False, test=Fa
     new_y = y[new_selected_index]
     new_s = s[new_selected_index]
     new_gt = gt[new_selected_index]
+    new_probabilities = probabilities[new_selected_index]  # 选中样本的概率
+
     unselected_index = np.where(s.reshape(-1) == 0)[0]
     new_unselected_index = np.random.permutation(unselected_index)
     unselected_new_t = price[new_unselected_index]
@@ -142,30 +249,35 @@ def demand(n, seed=1, ynoise=1., pnoise=1., ypcor=0.8, use_images=False, test=Fa
     unselected_new_y = y[new_unselected_index]
     unselected_new_s = s[new_unselected_index]
     unselected_new_gt = gt[new_unselected_index]
+    unselected_probabilities = probabilities[new_unselected_index]  # 未选中样本的概率
 
     return TrainDataSet(treatment=new_t[:Config.sample_num * 8 // 10],
                         instrumental=new_z[:Config.sample_num * 8 // 10],
                         covariate=new_x[:Config.sample_num * 8 // 10],
                         outcome=new_y[:Config.sample_num * 8 // 10],
                         structural=new_gt[:Config.sample_num * 8 // 10],
-                        selection=new_s[:Config.sample_num * 8 // 10]
+                        selection=new_s[:Config.sample_num * 8 // 10],
+                        selection_probability=new_probabilities[:Config.sample_num * 8 // 10]  # 添加概率
                         ), \
            TrainDataSet(treatment=unselected_new_t[:Config.sample_num * 8 // 10],
                         instrumental=unselected_new_z[:Config.sample_num * 8 // 10],
                         covariate=unselected_new_x[:Config.sample_num * 8 // 10],
                         outcome=unselected_new_y[:Config.sample_num * 8 // 10],
                         structural=unselected_new_gt[:Config.sample_num * 8 // 10],
-                        selection=unselected_new_s[:Config.sample_num * 8 // 10]
+                        selection=unselected_new_s[:Config.sample_num * 8 // 10],
+                        selection_probability=unselected_probabilities[:Config.sample_num * 8 // 10]  # 添加概率
                         ), \
            TestDataSet(
                treatment=new_t[Config.sample_num * 8 // 10:Config.sample_num],
                instrumental=new_z[Config.sample_num * 8 // 10:Config.sample_num],
                covariate=new_x[Config.sample_num * 8 // 10:Config.sample_num],
-               structural=new_gt[Config.sample_num * 8 // 10:Config.sample_num]
+               structural=new_gt[Config.sample_num * 8 // 10:Config.sample_num],
+               selection_probability=new_probabilities[Config.sample_num * 8 // 10:Config.sample_num]  # 添加概率
            ), \
            TestDataSet(
                treatment=unselected_new_t[Config.sample_num * 8 // 10:Config.sample_num],
                instrumental=unselected_new_z[Config.sample_num * 8 // 10:Config.sample_num],
                covariate=unselected_new_x[Config.sample_num * 8 // 10:Config.sample_num],
-               structural=unselected_new_gt[Config.sample_num * 8 // 10:Config.sample_num]
+               structural=unselected_new_gt[Config.sample_num * 8 // 10:Config.sample_num],
+               selection_probability=unselected_probabilities[Config.sample_num * 8 // 10:Config.sample_num]  # 添加概率
            )

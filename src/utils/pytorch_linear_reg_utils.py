@@ -33,6 +33,62 @@ def fit_linear(target: torch.Tensor,
     else:
         b = torch.einsum("nd,n...->d...", feature, target)
         weight = torch.einsum("de,d...->e...", A_inv, b)
+    # print(weight)
+    return weight
+
+def fit_weighted_linear(target: torch.Tensor,
+                        feature: torch.Tensor,
+                        reg: float = 0.0,
+                        weights: torch.Tensor = None):
+    """
+    Fit a weighted linear regression model where each sample's MSE is weighted.
+
+    Parameters
+    ----------
+    target : torch.Tensor[nBatch, dim1, dim2, ...]
+        The target tensor.
+    feature : torch.Tensor[nBatch, feature_dim]
+        The feature matrix.
+    reg : float
+        The regularization strength.
+    weights : torch.Tensor[nBatch]
+        Weights for each sample in the batch.
+
+    Returns
+    -------
+    torch.Tensor
+        The weights of the ridge linear regression model.
+    """
+    assert feature.dim() == 2, "Feature tensor must be 2D."
+    assert target.dim() >= 2, "Target tensor must have at least 2 dimensions."
+    assert weights is None or weights.dim() == 1, "Weights must be a 1D tensor."
+    assert weights is None or weights.size(0) == feature.size(0), "Weights must match the number of samples."
+
+    if weights is None:
+        weights = torch.ones(feature.size(0), device=feature.device)
+
+    # Expand weights for broadcasting
+    expanded_weights = weights.unsqueeze(-1).expand_as(target)
+
+    # Apply weights to targets
+    weighted_target = target * expanded_weights
+
+    # Weighted sum of squares of features
+    weighted_features = feature.t() * weights  # Broadcast weights across features
+    A = torch.matmul(weighted_features, feature) + reg * torch.eye(feature.size(1), device=feature.device)
+
+    if target.dim() == 2:
+        # Simple case with 2D target
+        b = torch.matmul(weighted_features, weighted_target)
+    else:
+        # Handle higher dimensional targets
+        b = torch.einsum('nd,n...->d...', feature, weighted_target)
+
+    # Compute the weights for the regression model
+    A_inv = torch.inverse(A)
+    weight = torch.matmul(A_inv, b)
+    # print(weights)
+    # print(weight)
     return weight
 
 # 输入特征、权重，输出预测值
@@ -45,6 +101,13 @@ def linear_reg_pred(feature: torch.Tensor, weight: torch.Tensor):
 
 # core 计算线性回归损失函数，加入了权重的正则化项
 def linear_reg_loss(target: torch.Tensor,
+                    feature: torch.Tensor,
+                    reg: float):
+    weight = fit_linear(target, feature, reg)
+    pred = linear_reg_pred(feature, weight)
+    return torch.norm((target - pred)) ** 2 + reg * torch.norm(weight) ** 2
+
+def linear_reg_weight_loss(target: torch.Tensor,
                     feature: torch.Tensor,
                     reg: float):
     weight = fit_linear(target, feature, reg)

@@ -10,6 +10,7 @@ class TrainDataSet(NamedTuple):
     outcome: np.ndarray
     structural: np.ndarray
     selection: Optional[np.ndarray]
+    selection_probability: torch.Tensor
 
 
 class TestDataSet(NamedTuple):
@@ -17,6 +18,7 @@ class TestDataSet(NamedTuple):
     instrumental: Optional[np.ndarray]
     covariate: Optional[np.ndarray]
     structural: np.ndarray
+    selection_probability: torch.Tensor
 
 
 class TrainDataSetTorch(NamedTuple):
@@ -26,6 +28,7 @@ class TrainDataSetTorch(NamedTuple):
     outcome: torch.Tensor
     structural: torch.Tensor
     selection: torch.Tensor
+    selection_probability: torch.Tensor
 
     @classmethod
     def from_numpy(cls, train_data: TrainDataSet):
@@ -40,7 +43,8 @@ class TrainDataSetTorch(NamedTuple):
                                  covariate=covariate,
                                  outcome=torch.tensor(train_data.outcome, dtype=torch.float32),
                                  structural=torch.tensor(train_data.structural, dtype=torch.float32),
-                                 selection=selection)
+                                 selection=selection,
+                                 selection_probability=torch.tensor(train_data.selection_probability, dtype=torch.float32))
 
     def to_gpu(self):
         covariate = None
@@ -54,7 +58,8 @@ class TrainDataSetTorch(NamedTuple):
                                  covariate=covariate,
                                  outcome=self.outcome.cuda(),
                                  structural=self.structural.cuda(),
-                                 selection=selection)
+                                 selection=selection,
+                                 selection_probability=self.selection_probability.cuda())
 
 
 class TestDataSetTorch(NamedTuple):
@@ -62,6 +67,7 @@ class TestDataSetTorch(NamedTuple):
     instrumental: torch.Tensor
     covariate: torch.Tensor
     structural: torch.Tensor
+    selection_probability: torch.Tensor
 
     @classmethod
     def from_numpy(cls, test_data: TestDataSet):
@@ -74,7 +80,9 @@ class TestDataSetTorch(NamedTuple):
         return TestDataSetTorch(treatment=torch.tensor(test_data.treatment, dtype=torch.float32),
                                 instrumental=instrumental,
                                 covariate=covariate,
-                                structural=torch.tensor(test_data.structural, dtype=torch.float32))
+                                structural=torch.tensor(test_data.structural, dtype=torch.float32),
+                                selection_probability=torch.tensor(test_data.selection_probability, dtype=torch.float32)
+                                )
 
     def to_gpu(self):
         covariate = None
@@ -86,7 +94,9 @@ class TestDataSetTorch(NamedTuple):
         return TestDataSetTorch(treatment=self.treatment.cuda(),
                                 instrumental=instrumental,
                                 covariate=covariate,
-                                structural=self.structural.cuda())
+                                structural=self.structural.cuda(),
+                                selection_probability=self.selection_probability.cuda()
+                                )
 
 
 def concat_dataset(dataset1: TrainDataSet, dataset2: TrainDataSet):
@@ -96,10 +106,12 @@ def concat_dataset(dataset1: TrainDataSet, dataset2: TrainDataSet):
     new_y = np.concatenate((dataset1.outcome, dataset2.outcome), axis=0)
     new_gt = np.concatenate((dataset1.structural, dataset2.structural), axis=0)
     new_s = np.concatenate((dataset1.selection, dataset2.selection), axis=0)
+    new_p = np.concatenate((dataset1.selection_probability, dataset2.selection_probability), axis=0)
     return TrainDataSet(treatment=new_t,
                         instrumental=new_z,
                         covariate=new_x,
                         outcome=new_y,
                         structural=new_gt,
-                        selection=new_s
+                        selection=new_s,
+                        selection_probability=new_p
                         )
