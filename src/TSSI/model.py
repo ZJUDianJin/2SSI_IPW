@@ -440,12 +440,12 @@ class TSSIModel:
                                                      covariate_feature,
                                                      self.add_stage2_intercept)
         pred = linear_reg_pred(feature, self.stage2_y1_weight)
-        # W = 1 / selection_probability.squeeze(1)
-        # stage2_weight = fit_weighted_linear(outcome, feature, 0.1, W)
-        # pred1 = linear_reg_pred(feature, stage2_weight)
+        W = 1 / selection_probability.squeeze(1)
+        stage2_weight = fit_weighted_linear(outcome, feature, 0.1, W)
+        pred_w = linear_reg_pred(feature, stage2_weight)
         # return pred1, pred
         feature = torch.cat((predicted_treatment_feature, phi_feature, covariate_feature), 1)
-        return self.y1_net(feature), pred
+        return self.y1_net(feature), pred, pred_w
 
     def evaluate_t(self, test_data: TestDataSetTorch):
         target = test_data.structural
@@ -453,8 +453,8 @@ class TSSIModel:
             pred1 = self.predict_t(test_data.treatment, test_data.covariate, test_data.instrumental, test_data.selection_probability)
         res1 = (torch.norm((target - pred1)) ** 2) / target.size()[0]
         with torch.no_grad():
-            pred2, pred_linear = self.predict_t_1(test_data.treatment, test_data.covariate, test_data.instrumental, test_data.selection_probability, target)
+            pred2, pred_linear, pred_weight = self.predict_t_1(test_data.treatment, test_data.covariate, test_data.instrumental, test_data.selection_probability, target)
         res2 = (torch.norm((target - pred2)) ** 2) / target.size()[0]
         res_linear = (torch.norm((target - pred_linear)) ** 2) / target.size()[0]
-        # return res2.detach().cpu().numpy(), res22.detach().cpu().numpy()
-        return res1.detach().cpu().numpy(), res2.detach().cpu().numpy(), res_linear.detach().cpu().numpy()
+        res_weight = (torch.norm((target - pred_weight)) ** 2) / target.size()[0]
+        return res1.detach().cpu().numpy(), res2.detach().cpu().numpy(), res_linear.detach().cpu().numpy(), res_weight.detach().cpu().numpy()

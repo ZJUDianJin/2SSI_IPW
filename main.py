@@ -12,30 +12,39 @@ if __name__ == '__main__':
     try:
         res_list = []
         print("begin")
-        lista = []
-        listb = []
-        listc = []
-        listd = []
+        lista1 = []
+        listb1 = []
+        listc1 = []
+        listd1 = []
+        lista2 = []
+        listb2 = []
+        listc2 = []
+        listd2 = []
         t = []
         for idx in range(Config.experiment_num):
             model = TSSITrainer(Config.config['model_structure'], Config.config['train_params'], True)
             res = model.train(rand_seed=42)
             res_list.append(res)
-            print("Epoch ", idx, " : ", res)
+            print("Epoch ", idx, " : s=1:", int(res[0][0]), int(res[0][1]), int(res[0][2]), "s=0:", int(res[1][0]), int(res[1][1]), int(res[1][2]))
             # p.savetxt("res/y_result.txt", res)
-            
-            loss_a_values, loss_b_values, _ = res[0]
-            loss_c_values, loss_d_values, _ = res[1]
-            lista.append(loss_a_values)
-            listb.append(loss_b_values)
-            listc.append(loss_c_values)
-            listd.append(loss_d_values)
+            loss_a1_values, loss_b1_values, loss_c1_values, loss_d1_values = res[0]
+            loss_a2_values, loss_b2_values, loss_c2_values, loss_d2_values = res[1]
+            lista1.append(loss_a1_values)
+            listb1.append(loss_b1_values)
+            listc1.append(loss_c1_values)
+            listd1.append(loss_d1_values)
+            lista2.append(loss_a2_values)
+            listb2.append(loss_b2_values)
+            listc2.append(loss_c2_values)
+            listd2.append(loss_d2_values)
             t.append(idx)
 
         # 第一个图：显示模型a和b的loss
         plt.figure(figsize=(12, 6))
-        plt.plot(t, lista, marker='o', linestyle='-', color='b', label='Model A Loss')
-        plt.plot(t, listb, marker='s', linestyle='-', color='g', label='Model B Loss')
+        plt.plot(t, lista1, marker='o', linestyle='-', color='b', label='Model A1 Loss')
+        plt.plot(t, listb1, marker='s', linestyle='-', color='g', label='Model B1 Loss')
+        plt.plot(t, listc1, marker='x', linestyle='-', color='r', label='Model C1 Loss')
+        plt.plot(t, listd1, marker='^', linestyle='-', color='m', label='Model D1 Loss')
         plt.xlabel('Epoch')
         plt.ylabel('Loss')
         plt.legend()
@@ -45,8 +54,10 @@ if __name__ == '__main__':
 
         # 第二个图：显示模型c和d的loss
         plt.figure(figsize=(12, 6))
-        plt.plot(t, listc, marker='x', linestyle='-', color='r', label='Model C Loss')
-        plt.plot(t, listd, marker='^', linestyle='-', color='m', label='Model D Loss')
+        plt.plot(t, lista2, marker='o', linestyle='-', color='b', label='Model A2 Loss')
+        plt.plot(t, listb2, marker='s', linestyle='-', color='g', label='Model B2 Loss')
+        plt.plot(t, listc2, marker='x', linestyle='-', color='r', label='Model C2 Loss')
+        plt.plot(t, listd2, marker='^', linestyle='-', color='m', label='Model D2 Loss')
         plt.xlabel('Epoch')
         plt.ylabel('Loss')
         plt.legend()
