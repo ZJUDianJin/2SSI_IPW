@@ -1,32 +1,20 @@
 from torch import nn
 
-        # self.treatment_net: nn.Module = networks[0]
-        # self.instrumental_net: nn.Module = networks[1]
-        # self.selection_net: nn.Module = networks[2]
-        # self.covariate_net: Optional[nn.Module] = networks[3]
-        # self.r1_net: nn.Module = networks[4]
-        # self.r0_net: nn.Module = networks[5]
-        # self.phi_net: nn.Module = networks[6]
-        # self.s1_net: nn.Module = networks[7]
-        # self.odds_net: nn.Module = networks[8]
-        # self.S1_net: nn.Module = networks[9]
-        # self.y_net: nn.Module = networks[10]
-        # self.y1_net: nn.Module = networks[11]
-
 class Config:
     config = {
         "model_structure": [
             # treatment_net
-            nn.Sequential(nn.Linear(1, 4)), 
+            nn.Sequential(nn.Linear(1, 1)), 
             # instrumental_net
             nn.Sequential(
                           nn.Linear(3, 1)
-                          # nn.Linear(3, 128),
-                          # nn.ReLU(),
-                          # nn.Linear(128, 64),
-                          # nn.ReLU(),
-                          # nn.Linear(64, 1),
-                          # nn.BatchNorm1d(3)
+                        #   nn.ReLU(),
+                        #   nn.Linear(3, 128),
+                        #   nn.ReLU(),
+                        #   nn.Linear(128, 64),
+                        #   nn.ReLU(),
+                        #   nn.Linear(64, 1),
+                        #   nn.BatchNorm1d(3)
                           ),
             # selection_net
             nn.Sequential(
@@ -37,17 +25,12 @@ class Config:
                           nn.Sigmoid()
                           ),
             # covariate_net
-            nn.Sequential(
-                          nn.Linear(2, 1)
-                          # nn.Linear(2, 128),
-                          # nn.ReLU(),
-                          # nn.Linear(128, 64),
-                          # nn.ReLU(),
-                          # nn.Linear(64, 32),
-                          # nn.BatchNorm1d(32),
-                          # nn.ReLU(),
-                          # nn.Linear(32, 1),
-                          # nn.ReLU()
+            nn.Sequential(nn.Linear(2, 128),
+                          nn.ReLU(),
+                          nn.Linear(128, 32),
+                          nn.BatchNorm1d(32),
+                          nn.ReLU(),
+                          nn.Linear(32, 1),
                           ),
             # r1_net
             nn.Sequential(nn.Linear(4, 16),
@@ -80,27 +63,32 @@ class Config:
                           nn.Softplus()
                           ),
             # S1_net
-            nn.Sequential(nn.Linear(7, 16),
+            nn.Sequential(nn.Linear(4, 16),
                           nn.BatchNorm1d(16),
                           nn.ReLU(),
                           nn.Linear(16, 1),
                           nn.Sigmoid()
                           ),
             # y_net
-            nn.Sequential(nn.Linear(6, 1),
+            nn.Sequential(nn.Linear(3, 1)
                           # nn.ReLU(),
-                          # nn.Linear(128, 32),
-                          # nn.BatchNorm1d(32),
+                          # nn.Linear(8, 1)
                           # nn.ReLU(),
-                          # nn.Linear(32, 1), 
+                          # nn.Linear(16, 1)
+                        #   nn.Linear(128, 32),
+                        #   nn.BatchNorm1d(32),
+                        #   nn.ReLU(),
+                        #   nn.Linear(32, 1), 
                           ),
             # y1_net
-            nn.Sequential(nn.Linear(6, 1),
+            nn.Sequential(nn.Linear(3, 1)
                           # nn.ReLU(),
-                          # nn.Linear(128, 32),
-                          # nn.BatchNorm1d(32),
-                          # nn.ReLU(),
-                          # nn.Linear(32, 1), 
+                          # nn.Linear(8, 1)
+                          # nn.Linear(16, 1)
+                        #   nn.Linear(128, 32),
+                        #   nn.BatchNorm1d(32),
+                        #   nn.ReLU(),
+                        #   nn.Linear(32, 1), 
                           ),
         ],
         "train_params": {
@@ -127,10 +115,11 @@ class Config:
             "S1_weight_decay": 0.0,
             "S0_weight_decay": 0.0,
             "y_weight_decay": 0.0,
-            "y1_weight_decay": 0.0
+            "y1_weight_decay": 0.0,
+            "lam_y": 0.1
         }
     }
-    experiment_num = 50
-    c_strength = 10
+    experiment_num = 100
+    c_strength = 1
     u_strength = 10
     sample_num = 5000

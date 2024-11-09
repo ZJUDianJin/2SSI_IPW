@@ -4,6 +4,7 @@ from src.TSSI.trainer import TSSITrainer
 from config import Config
 import matplotlib.pyplot as plt
 import os
+import sys
 
 if not os.path.exists('result'):
     os.makedirs('result')
@@ -12,6 +13,7 @@ if __name__ == '__main__':
     try:
         res_list = []
         print("begin")
+        filename = sys.argv[1]
         lista1 = []
         listb1 = []
         listc1 = []
@@ -39,33 +41,31 @@ if __name__ == '__main__':
             listd2.append(loss_d2_values)
             t.append(idx)
 
-        # 第一个图：显示模型a和b的loss
-        plt.figure(figsize=(12, 6))
-        plt.plot(t, lista1, marker='o', linestyle='-', color='b', label='Model A1 Loss')
-        plt.plot(t, listb1, marker='s', linestyle='-', color='g', label='Model B1 Loss')
-        plt.plot(t, listc1, marker='x', linestyle='-', color='r', label='Model C1 Loss')
-        plt.plot(t, listd1, marker='^', linestyle='-', color='m', label='Model D1 Loss')
-        plt.xlabel('Epoch')
-        plt.ylabel('Loss')
-        plt.legend()
-        plt.grid(True)
-        plt.savefig('result/Loss_simlple_net_1.png')
-        plt.show()
+            # 第一个图：显示模型a和b的loss
+            plt.figure(figsize=(12, 6))
+            plt.plot(t, lista1, marker='o', linestyle='-', color='b', label='Y Loss')
+            plt.plot(t, listb1, marker='s', linestyle='-', color='g', label='Y with Regular Loss')
+            plt.plot(t, listc1, marker='x', linestyle='-', color='r', label='Linear Loss')
+            # plt.plot(t, listd1, marker='^', linestyle='-', color='m', label='Linear W Loss')
+            plt.xlabel('Epoch')
+            plt.ylabel('Loss')
+            plt.legend()
+            plt.grid(True)
+            plt.savefig(f'result/{filename}_s1')
 
-        # 第二个图：显示模型c和d的loss
-        plt.figure(figsize=(12, 6))
-        plt.plot(t, lista2, marker='o', linestyle='-', color='b', label='Model A2 Loss')
-        plt.plot(t, listb2, marker='s', linestyle='-', color='g', label='Model B2 Loss')
-        plt.plot(t, listc2, marker='x', linestyle='-', color='r', label='Model C2 Loss')
-        plt.plot(t, listd2, marker='^', linestyle='-', color='m', label='Model D2 Loss')
-        plt.xlabel('Epoch')
-        plt.ylabel('Loss')
-        plt.legend()
-        plt.grid(True)
-        plt.savefig('result/Loss_simlple_net_2.png')
-        plt.show()
+            # 第二个图：显示模型c和d的loss
+            plt.figure(figsize=(12, 6))
+            plt.plot(t, lista2, marker='o', linestyle='-', color='b', label='Y Loss')
+            plt.plot(t, listb2, marker='s', linestyle='-', color='g', label='Y with Regular Loss')
+            plt.plot(t, listc2, marker='x', linestyle='-', color='r', label='Linear Loss')
+            # plt.plot(t, listd2, marker='^', linestyle='-', color='m', label='Linear W Loss')
+            plt.xlabel('Epoch')
+            plt.ylabel('Loss')
+            plt.legend()
+            plt.grid(True)
+            plt.savefig(f'result/{filename}_s0')
+
         res_list = np.array(res_list)
-
         bias = np.abs(np.mean(res_list, axis=0)).reshape(res_list.shape[1], 1)
         sd = np.std(res_list, axis=0).reshape(res_list.shape[1], 1)
         print(idx, " - bias:", bias, " sd", sd)

@@ -47,6 +47,7 @@ class TSSITrainer(object):
         self.S0_weight_decay: float = train_params["S0_weight_decay"]
         self.y_weight_decay: float = train_params["y_weight_decay"]
         self.y1_weight_decay: float = train_params["y1_weight_decay"]
+        self.lam_y: float = train_params["lam_y"]
 
         # build networks
         self.treatment_net: nn.Module = networks[0]
@@ -114,6 +115,7 @@ class TSSITrainer(object):
         train_2nd_t = TrainDataSetTorch.from_numpy(train_2nd_t)
         train_3rd_t = TrainDataSetTorch.from_numpy(train_3rd_t)
         test_data_t = TestDataSetTorch.from_numpy(test_data)
+        # print(train_2nd_t.selection_probability.mean())
         unselected_test_data_t = TestDataSetTorch.from_numpy(unselected_test_data)
         if self.gpu_flg:
             train_1st_t = train_1st_t.to_gpu()
@@ -125,19 +127,20 @@ class TSSITrainer(object):
         self.lam1 *= train_1st_t[0].size()[0]
         self.lam2 *= train_2nd_t[0].size()[0]
         self.lam3 *= train_3rd_t[0].size()[0]
+        self.lam_y = train_2nd_t[0].size()[0]
         writer = SummaryWriter()
         
         for t in range(self.n_epoch): # 2SIS
             self.stage1_update(train_1st_t, t, writer)
-            if self.covariate_net:
-                self.update_covariate_net(train_1st_t, train_2nd_t, t, writer)
+            # if self.covariate_net:
+            #     self.update_covariate_net(train_1st_t, train_2nd_t, t, writer)
             self.stage2_update(train_1st_t, train_2nd_t, t, writer)
         writer.close()
         mdl = TSSIModel(self.treatment_net, self.instrumental_net, self.selection_net,
                         self.covariate_net, self.r1_net, self.r0_net, self.odds_net, self.phi_net, self.S1_net, self.y_net, self.y1_net,
                         self.add_stage1_intercept, self.add_stage2_intercept,
                         self.odds_iter, self.selection_weight_decay,
-                        self.r1_weight_decay, self.r0_weight_decay, self.odds_weight_decay, self.y_weight_decay, self.y1_weight_decay)
+                        self.r1_weight_decay, self.r0_weight_decay, self.odds_weight_decay, self.y_weight_decay, self.y1_weight_decay, self.lam_y, self.distance_dim)
         mdl.fit_t(train_1st_t, train_2nd_t, train_3rd_t, self.lam1, self.lam2, self.lam3) # shadow variable -> Selection Bias
 
         if self.gpu_flg:
@@ -145,11 +148,6 @@ class TSSITrainer(object):
 
         oos_loss: numpy.ndarray = mdl.evaluate_t(test_data_t)
         unselected_loss: numpy.ndarray = mdl.evaluate_t(unselected_test_data_t)
-        writer = SummaryWriter()
-        writer.add_scalar('Y1_with_W_selected Train loss', oos_loss[0], self.n_epoch)
-        writer.add_scalar('Y1_without_W_selected Train loss', oos_loss[1], self.n_epoch)
-        writer.add_scalar('Y1_with_W_unselected Train loss', unselected_loss[0], self.n_epoch)
-        writer.add_scalar('Y1_without_W_unselected Train loss', unselected_loss[1], self.n_epoch)
         return oos_loss, unselected_loss
 
     def stage1_update(self, train_1st_t: TrainDataSetTorch, epoch: int, writer: SummaryWriter):
