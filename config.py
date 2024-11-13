@@ -7,13 +7,14 @@ class Config:
             nn.Sequential(nn.Linear(1, 1)), 
             # instrumental_net
             nn.Sequential(
-                          nn.Linear(3, 1)
-                        #   nn.ReLU(),
-                        #   nn.Linear(3, 128),
-                        #   nn.ReLU(),
-                        #   nn.Linear(128, 64),
-                        #   nn.ReLU(),
-                        #   nn.Linear(64, 1),
+                          # nn.Linear(3, 1)
+                          # nn.ReLU(),
+                          nn.Linear(3, 128),
+                          nn.ReLU(),
+                          nn.Linear(128, 64),
+                          nn.BatchNorm1d(64),
+                          nn.ReLU(),
+                          nn.Linear(64, 1),
                         #   nn.BatchNorm1d(3)
                           ),
             # selection_net
@@ -32,6 +33,17 @@ class Config:
                           nn.ReLU(),
                           nn.Linear(32, 1),
                           ),
+              ## bigXnet
+            # nn.Sequential(nn.Linear(2, 256),
+            #               nn.ReLU(),
+            #               nn.Linear(256, 128),
+            #               nn.BatchNorm1d(128),
+            #               nn.ReLU(),
+            #               nn.Linear(128, 32),
+            #               nn.BatchNorm1d(32),
+            #               nn.ReLU(),
+            #               nn.Linear(32, 1),
+            #               ),
             # r1_net
             nn.Sequential(nn.Linear(4, 16),
                           nn.BatchNorm1d(16),
@@ -72,7 +84,7 @@ class Config:
             # y_net
             nn.Sequential(nn.Linear(3, 1)
                           # nn.ReLU(),
-                          # nn.Linear(8, 1)
+                          # nn.Linear(16, 1)
                           # nn.ReLU(),
                           # nn.Linear(16, 1)
                         #   nn.Linear(128, 32),
@@ -116,7 +128,8 @@ class Config:
             "S0_weight_decay": 0.0,
             "y_weight_decay": 0.0,
             "y1_weight_decay": 0.0,
-            "lam_y": 0.1
+            "lam_y": 0.1,
+            "lam_a": 100
         }
     }
     experiment_num = 100

@@ -5,9 +5,10 @@ from torch import nn
 from itertools import chain
 from torch.utils.tensorboard import SummaryWriter
 from src.utils.mi_estimators import *
-from src.utils.pytorch_linear_reg_utils import fit_linear, linear_reg_pred, outer_prod, add_const_col, fit_weighted_linear
+from src.utils.pytorch_linear_reg_utils import fit_linear, linear_reg_pred, outer_prod, add_const_col, fit_weighted_linear, linear_reg_loss
 from src.data.data_class import TrainDataSetTorch, TestDataSetTorch, concat_dataset
 
+variance = 1
 
 class TSSIModel:
     stage1_weight: torch.Tensor
@@ -80,11 +81,19 @@ class TSSIModel:
         return feature
     
     def augment_stage1_feature_plus(instrumental_feature: torch.Tensor,
+                                    covariate_feature: torch.Tensor,
                                add_stage1_intercept: bool):
 
         feature = instrumental_feature
         if add_stage1_intercept:
             feature = add_const_col(feature)
+        if covariate_feature is not None:
+            feature_tmp = covariate_feature
+            if add_stage1_intercept:
+                feature_tmp = add_const_col(feature_tmp)
+            feature = outer_prod(feature, feature_tmp)
+            feature = torch.flatten(feature, start_dim=1)
+
         return feature
 
     @staticmethod
@@ -159,28 +168,27 @@ class TSSIModel:
                  instrumental_1st_feature: torch.Tensor,
                  instrumental_2nd_feature: torch.Tensor,
                  phi_2nd_feature: torch.Tensor,
+                 covariate_1st_feature: Optional[torch.Tensor],
                  covariate_2nd_feature: Optional[torch.Tensor],
                  outcome_2nd_t: torch.Tensor,
                  lam1: float, lam2: float,
                  add_stage1_intercept: bool,
                  add_stage2_intercept: bool,
                  ):
-
+        global variance
         # stage1
         feature = TSSIModel.augment_stage1_feature(instrumental_1st_feature, add_stage1_intercept)
         stage1_weight = fit_linear(treatment_1st_feature, feature, lam1)
-
         # predicting for stage 2
         feature = TSSIModel.augment_stage1_feature(instrumental_2nd_feature, add_stage1_intercept)
         predicted_treatment_2nd_feature = linear_reg_pred(feature, stage1_weight) # T^
 
         # !
-        variance = 1
         std_dev = np.sqrt(variance)
         noise = np.random.normal(0, std_dev, (treatment_2nd_feature.size()[0], 1))
         noise = torch.from_numpy(noise).float()
         noise = noise.cuda()
-        predicted_treatment_2nd_feature = treatment_2nd_feature + noise
+        # predicted_treatment_2nd_feature = treatment_2nd_feature + noise
 
         # stage2 - y1 regression
         feature = TSSIModel.augment_stage_y1_feature(predicted_treatment_2nd_feature,
@@ -207,6 +215,7 @@ class TSSIModel:
                  phi_2nd_feature: torch.Tensor,
                  covariate_1st_feature: Optional[torch.Tensor],
                  covariate_2nd_feature: Optional[torch.Tensor],
+                 covariate_3rd_feature: Optional[torch.Tensor],
                  covariate: Optional[torch.Tensor],
                  odds_2nd_feature: torch.Tensor,
                  odds_2nd_predicted_feature: torch.Tensor,
@@ -219,14 +228,13 @@ class TSSIModel:
                  add_stage1_intercept: bool,
                  add_stage2_intercept: bool,
                  ):
+        global variance
         # residual for stage 2
         feature = TSSIModel.augment_stage1_feature(instrumental_2nd_feature, add_stage1_intercept)
         predicted_treatment_2nd_feature = linear_reg_pred(feature, self.stage1_weight)
-        feature = TSSIModel.augment_stage1_feature(instrumental_3rd_feature, add_stage1_intercept)
-        predicted_treatment_3rd_feature = linear_reg_pred(feature, self.stage1_weight)
 
         # !
-        predicted_treatment_2nd_feature = treatment_2nd_feature + self.generate_noise(treatment_2nd_feature.size()[0], 1).cuda()
+        # predicted_treatment_2nd_feature = treatment_2nd_feature + self.generate_noise(treatment_2nd_feature.size()[0], variance).cuda()
 
         writer = SummaryWriter()
         # stage2 - f(R | X, S)
@@ -383,12 +391,14 @@ class TSSIModel:
         if self.covariate_net is not None:
             covariate_1st_feature = self.covariate_net(train_1st_data_t.covariate).detach()
             covariate_2nd_feature = self.covariate_net(train_2nd_data_t.covariate).detach()
-
+            covariate_3rd_feature = self.covariate_net(train_3rd_data_t.covariate).detach()
+        global variance
         res = TSSIModel.fit_2sls(treatment_1st_feature,
                                  treatment_2nd_feature,
                                  instrumental_1st_feature,
                                  instrumental_2nd_feature,
                                  phi_2nd_feature,
+                                 covariate_1st_feature,
                                  covariate_2nd_feature,
                                  outcome_2nd_t,
                                  lam1, lam2,
@@ -399,10 +409,11 @@ class TSSIModel:
         # predict for stage 2 odds
         feature = TSSIModel.augment_stage1_feature(instrumental_2nd_feature, self.add_stage1_intercept)
         predicted_treatment_2nd_feature = linear_reg_pred(feature, self.stage1_weight)
+        temp = predicted_treatment_2nd_feature
 
         # !
-        predicted_treatment_2nd_feature = treatment_2nd_feature + self.generate_noise(treatment_2nd_feature.size()[0], 1).cuda()
-
+        # predicted_treatment_2nd_feature = treatment_2nd_feature + self.generate_noise(treatment_2nd_feature.size()[0], variance).cuda()
+        # print(torch.mean((predicted_treatment_2nd_feature - temp) ** 2))
         feature = TSSIModel.augment_stage_y1_feature(predicted_treatment_2nd_feature,
                                                      phi_2nd_feature, 
                                                      covariate_2nd_feature,
@@ -431,6 +442,7 @@ class TSSIModel:
                                  phi_2nd_feature,
                                  covariate_1st_feature,
                                  covariate_2nd_feature,
+                                 covariate_3rd_feature,
                                  covariate, 
                                  odds_feature,
                                  odds_predicted_feature,
@@ -449,6 +461,7 @@ class TSSIModel:
                   instrumental: Optional[torch.Tensor], selection_probability: Optional[torch.Tensor]):
         treatment_feature = self.treatment_net(treatment)
         covariate_feature = None
+        global variance
         instrumental_feature = self.instrumental_net(instrumental).detach()
         if self.covariate_net:
             covariate_feature = self.covariate_net(covariate)
@@ -459,7 +472,7 @@ class TSSIModel:
         else:
             condition_feature = torch.zeros((len(treatment), self.condition_dim))
         # !
-        predicted_treatment_feature = treatment_feature + self.generate_noise(treatment_feature.size()[0], 1).cuda()
+        # predicted_treatment_feature = treatment_feature + self.generate_noise(treatment_feature.size()[0], variance).cuda()
         feature = torch.cat((predicted_treatment_feature, phi_feature, covariate_feature), 1)
         return self.y_net(feature)
     
@@ -467,6 +480,7 @@ class TSSIModel:
                   instrumental: Optional[torch.Tensor], selection_probability: Optional[torch.Tensor], outcome: Optional[torch.Tensor]):
         treatment_feature = self.treatment_net(treatment)
         covariate_feature = None
+        global variance
         instrumental_feature = self.instrumental_net(instrumental).detach()
         if self.covariate_net:
             covariate_feature = self.covariate_net(covariate)
@@ -477,7 +491,7 @@ class TSSIModel:
         else:
             condition_feature = torch.zeros((len(treatment), self.condition_dim))
         # !
-        predicted_treatment_feature = treatment_feature + self.generate_noise(treatment_feature.size()[0], 1).cuda()
+        # predicted_treatment_feature = treatment_feature + self.generate_noise(treatment_feature.size()[0], variance).cuda()
         feature = TSSIModel.augment_stage_y1_feature(predicted_treatment_feature,
                                                      phi_feature,
                                                      covariate_feature,
