@@ -19,6 +19,10 @@ class TSSITrainer(object):
     def __init__(self, networks: List[Any], train_params: Dict[str, Any],
                  gpu_flg: bool = False):
         self.gpu_flg = gpu_flg and torch.cuda.is_available()
+        # 对于 PyTorch，设置为确定性模式
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+
         # self.gpu_flg = False
         # configure training params
         self.lam1: float = train_params["lam1"]
@@ -108,8 +112,7 @@ class TSSITrainer(object):
             The performance of model evaluated by oos
         """
         # 加载数据集
-        train_data, unselected_train_data, test_data, unselected_test_data = demand(Config.sample_num * 10,
-                                                                                        rand_seed)
+        train_data, unselected_train_data, test_data, unselected_test_data = demand(Config.sample_num * 10, rand_seed)
         train_1st_t, train_2nd_t, train_3rd_t = concat_dataset(train_data,
                                                                unselected_train_data), train_data, unselected_train_data
         train_1st_t = TrainDataSetTorch.from_numpy(train_1st_t)
@@ -117,11 +120,22 @@ class TSSITrainer(object):
         train_3rd_t = TrainDataSetTorch.from_numpy(train_3rd_t)
         test_data_t = TestDataSetTorch.from_numpy(test_data)
         unselected_test_data_t = TestDataSetTorch.from_numpy(unselected_test_data)
+        
+        train_data_predS, unselected_train_data_predS, test_data_predS, unselected_test_data_predS = demand(Config.sample_num * 10, rand_seed)
+        train_1st_t_predS, train_2nd_t_predS, train_3rd_t_predS = concat_dataset(train_data_predS,
+                                                               unselected_train_data_predS), train_data_predS, unselected_train_data_predS
+        train_1st_t_predS = TrainDataSetTorch.from_numpy(train_1st_t_predS)
+        train_2nd_t_predS = TrainDataSetTorch.from_numpy(train_2nd_t_predS)
+        train_3rd_t_predS = TrainDataSetTorch.from_numpy(train_3rd_t_predS)
+        test_data_t_predS = TestDataSetTorch.from_numpy(test_data_predS)
+        unselected_test_data_t_predS = TestDataSetTorch.from_numpy(unselected_test_data_predS)
+        
         if self.gpu_flg:
             train_1st_t = train_1st_t.to_gpu()
             train_2nd_t = train_2nd_t.to_gpu()
             train_3rd_t = train_3rd_t.to_gpu()
             test_data_t = test_data_t.to_gpu()
+            train_1st_t_predS = train_1st_t_predS.to_gpu()
             unselected_test_data_t = unselected_test_data_t.to_gpu()
         # 调整正则化超参数，与数据规模成比例
         self.lam1 *= train_1st_t[0].size()[0]
@@ -132,7 +146,8 @@ class TSSITrainer(object):
         
         for t in range(self.n_epoch): # 2SIS
             self.stage1_update(train_1st_t, t, writer)
-        # for t in range(self.n_epoch): # 2SIS
+            # if self.covariate_net:
+            #     self.update_covariate_net(train_1st_t, train_2nd_t, t, writer)
             self.stage2_update(train_1st_t, train_2nd_t, t, writer)
         writer.close()
         mdl = TSSIModel(self.treatment_net, self.instrumental_net, self.selection_net,
@@ -140,14 +155,14 @@ class TSSITrainer(object):
                         self.add_stage1_intercept, self.add_stage2_intercept,
                         self.odds_iter, self.selection_weight_decay,
                         self.r1_weight_decay, self.r0_weight_decay, self.odds_weight_decay, self.y_weight_decay, self.y1_weight_decay, self.lam_y, self.distance_dim)
-        mdl.fit_t(train_1st_t, train_2nd_t, train_3rd_t, self.lam1, self.lam2, self.lam3) # shadow variable -> Selection Bias
+        loss = mdl.fit_t(train_1st_t, train_2nd_t, train_3rd_t, train_1st_t_predS, self.lam1, self.lam2, self.lam3) # shadow variable -> Selection Bias
 
         if self.gpu_flg:
             torch.cuda.empty_cache()
 
         oos_loss: numpy.ndarray = mdl.evaluate_t(test_data_t)
         unselected_loss: numpy.ndarray = mdl.evaluate_t(unselected_test_data_t)
-        return oos_loss, unselected_loss
+        return oos_loss, unselected_loss, loss
 
     def stage1_update(self, train_1st_t: TrainDataSetTorch, epoch: int, writer: SummaryWriter):
         self.treatment_net.train(False)
@@ -155,6 +170,7 @@ class TSSITrainer(object):
         self.phi_net.train(True)
         self.s1_net.train(True)
         self.S1_net.train(False)
+        self.selection_net.train(False)
         bce_func = nn.BCELoss()
         if self.covariate_net:
             self.covariate_net.train(False)
@@ -187,33 +203,6 @@ class TSSITrainer(object):
             loss_s.backward()
             self.s1_opt.step()
             writer.add_scalar('Phi Train loss', loss_s, epoch * self.stage1_iter + i)
-        loss_t = linear_reg_loss(treatment_feature, feature_t, 0)
-        # print("?", loss_t / train_1st_t.treatment.size()[0])
-
-
-        self.s1_net.train(False)
-        self.phi_net.train(False)
-        self.instrumental_net.train(False)
-        self.S1_net.train(True)
-
-        treatment_1st_feature = self.treatment_net(train_1st_t.treatment).detach()
-        instrumental_1st_feature = self.instrumental_net(train_1st_t.instrumental).detach()
-        feature = TSSIModel.augment_stage1_feature(instrumental_1st_feature, self.add_stage1_intercept)
-        stage1_weight = fit_linear(treatment_1st_feature, feature, self.lam1)
-        predicted_treatment_feature = linear_reg_pred(feature, stage1_weight).detach()
-
-        
-        # train f(x, t, z)
-        for i in range(self.stage1_S1_iter):
-            phi_feature = self.phi_net(train_1st_t.instrumental).detach()
-            S1_pred = self.S1_net(torch.cat((predicted_treatment_feature, train_1st_t.covariate, phi_feature), 1))
-            loss_S1 = bce_func(S1_pred, train_1st_t.selection)
-            self.S1_opt.zero_grad()
-            loss_S1.backward()
-            self.S1_opt.step()
-            writer.add_scalar('S1 Train loss', loss_S1, epoch * self.stage1_iter + i)
-        writer.close()
-
 
 
     def stage2_update(self, train_1st_t: TrainDataSetTorch, train_2nd_t: TrainDataSetTorch, epoch: int, writer: SummaryWriter):
@@ -223,6 +212,7 @@ class TSSITrainer(object):
         self.S1_net.train(False)
         self.y_net.train(False)
         self.y1_net.train(False)
+        self.selection_net.train(False)
 
         if self.covariate_net:
             self.covariate_net.train(False)
@@ -259,3 +249,35 @@ class TSSITrainer(object):
             self.treatment_opt.step()
             writer.add_scalar('TreatmentNet Train loss', loss, epoch * self.stage1_iter + i)
 
+    def update_covariate_net(self, train_1st_data: TrainDataSetTorch, train_2nd_data: TrainDataSetTorch, epoch: int, writer: SummaryWriter):
+        # have instrumental features
+        self.selection_net.train(False)
+        self.instrumental_net.train(False)
+        instrumental_1st_feature = self.instrumental_net(train_1st_data.instrumental).detach()
+        instrumental_2nd_feature = self.instrumental_net(train_2nd_data.instrumental).detach()
+
+        self.treatment_net.train(False)
+        treatment_1st_feature = self.treatment_net(train_1st_data.treatment).detach()
+        treatment_2nd_feature = self.treatment_net(train_2nd_data.treatment).detach()
+
+        feature = TSSIModel.augment_stage1_feature(instrumental_1st_feature, self.add_stage1_intercept)
+        stage1_weight = fit_linear(treatment_1st_feature, feature, self.lam1) 
+
+        feature = TSSIModel.augment_stage1_feature(instrumental_2nd_feature, self.add_stage1_intercept)
+        predicted_treatment_feature = linear_reg_pred(feature, stage1_weight).detach() 
+
+        self.covariate_net.train(True)
+        self.phi_net.train(False)
+        phi_feature = self.phi_net(train_2nd_data.instrumental).detach()
+        for i in range(self.covariate_iter): 
+            self.covariate_opt.zero_grad()
+            covariate_feature = self.covariate_net(train_2nd_data.covariate)
+            # stage2 - y1 regression
+            feature = TSSIModel.augment_stage_y1_feature(predicted_treatment_feature,
+                                                         phi_feature,
+                                                         covariate_feature,
+                                                         self.add_stage2_intercept)
+            loss = linear_reg_loss(train_2nd_data.outcome, feature, self.lam2)
+            loss.backward()
+            self.covariate_opt.step()
+            writer.add_scalar('CovariateNet Train loss', loss, epoch * self.stage1_iter + i)

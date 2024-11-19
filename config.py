@@ -7,22 +7,22 @@ class Config:
             nn.Sequential(nn.Linear(1, 1)), 
             # instrumental_net
             nn.Sequential(
-                          # nn.Linear(3, 1)
+                          nn.Linear(3, 1)
                           # nn.ReLU(),
-                          nn.Linear(3, 128),
-                          nn.ReLU(),
-                          nn.Linear(128, 64),
-                          nn.BatchNorm1d(64),
-                          nn.ReLU(),
-                          nn.Linear(64, 1),
+                          # nn.Linear(3, 128),
+                          # nn.ReLU(),
+                          # nn.Linear(128, 64),
+                          # nn.BatchNorm1d(64),
+                          # nn.ReLU(),
+                          # nn.Linear(64, 1),
                         #   nn.BatchNorm1d(3)
                           ),
             # selection_net
             nn.Sequential(
-                          nn.Linear(5, 128),
-                          nn.BatchNorm1d(128),
-                          nn.ReLU(),
-                          nn.Linear(128, 1),
+                          nn.Linear(4, 1),
+                          # nn.BatchNorm1d(128),
+                          # nn.ReLU(),
+                          # nn.Linear(128, 1),
                           nn.Sigmoid()
                           ),
             # covariate_net
@@ -68,10 +68,10 @@ class Config:
                           nn.Sigmoid()
                           ),
             # odds_net   
-            nn.Sequential(nn.Linear(5, 16),
-                          nn.BatchNorm1d(16),
-                          nn.ReLU(),
-                          nn.Linear(16, 1),
+            nn.Sequential(nn.Linear(5, 1),
+                          # nn.BatchNorm1d(16),
+                          # nn.ReLU(),
+                          # nn.Linear(16, 1),
                           nn.Softplus()
                           ),
             # S1_net
@@ -83,24 +83,23 @@ class Config:
                           ),
             # y_net
             nn.Sequential(nn.Linear(3, 1)
-                          # nn.ReLU(),
-                          # nn.Linear(16, 1)
-                          # nn.ReLU(),
-                          # nn.Linear(16, 1)
+                        #   nn.ReLU(),
                         #   nn.Linear(128, 32),
+                        #   # nn.Linear(16, 1)
+                        # #   nn.Linear(128, 32),
                         #   nn.BatchNorm1d(32),
                         #   nn.ReLU(),
-                        #   nn.Linear(32, 1), 
+                        #   nn.Linear(32, 1)
                           ),
             # y1_net
             nn.Sequential(nn.Linear(3, 1)
-                          # nn.ReLU(),
-                          # nn.Linear(8, 1)
-                          # nn.Linear(16, 1)
+                        #   nn.ReLU(),
                         #   nn.Linear(128, 32),
+                        #   # nn.Linear(16, 1)
+                        # #   nn.Linear(128, 32),
                         #   nn.BatchNorm1d(32),
                         #   nn.ReLU(),
-                        #   nn.Linear(32, 1), 
+                        #   nn.Linear(32, 1)
                           ),
         ],
         "train_params": {
@@ -129,10 +128,10 @@ class Config:
             "y_weight_decay": 0.0,
             "y1_weight_decay": 0.0,
             "lam_y": 0.1,
-            "lam_a": 100
+            "lam_a": 20000
         }
     }
-    experiment_num = 100
+    experiment_num = 200
     c_strength = 1
     u_strength = 10
     sample_num = 5000
