@@ -53,8 +53,6 @@ class TSSIModel:
         self.add_stage1_intercept = add_stage1_intercept
         self.add_stage2_intercept = add_stage2_intercept
         self.odds_iter = odds_iter
-        self.selection_opt = torch.optim.Adam(self.selection_net.parameters(),
-                                              weight_decay=selection_weight_decay)
         self.odds_opt = torch.optim.Adam(self.odds_net.parameters(),
                                          weight_decay=odds_weight_decay)
         self.r1_opt = torch.optim.Adam(self.r1_net.parameters(),
@@ -68,6 +66,8 @@ class TSSIModel:
         self.y1_opt = torch.optim.Adam(self.y1_net.parameters(),
                                        weight_decay=y1_weight_decay)
         # self.y1_opt = torch.optim.Adam(self.y1_net.parameters(),
+        self.selection_opt = torch.optim.Adam(self.selection_net.parameters(),
+                                        weight_decay=selection_weight_decay)
                                       
         self.condition_dim = 2
         self.lam_y = lam_y
@@ -275,11 +275,11 @@ class TSSIModel:
         # stage2 - OR~(X,Y) 
         self.odds_net.train(True)
         self.selection_net.train(False)
-        for e in range(self.odds_iter):
+        for e in range(100):
             self.odds_opt.zero_grad()
             odds_pred = self.odds_net(odds_2nd_feature)
-            loss_odds = loss_func(odds_pred, odds_2nd_d) + lam3 * torch.mean(
-                torch.max(torch.zeros(odds_pred.shape).to(odds_pred.device), odds_pred) ** 2)
+            loss_odds = loss_func(odds_pred, odds_2nd_d) + lam3 * torch.mean(torch.max(torch.zeros(odds_pred.shape).to(odds_pred.device), odds_pred) ** 2)
+            # print(loss_func(odds_pred, odds_2nd_d))
             loss_odds.backward()
             self.odds_opt.step()
             writer.add_scalar('OR Train loss', loss_odds, e)
@@ -298,14 +298,19 @@ class TSSIModel:
         S1_pred = predS.detach()
         ratio = (1 - S1_pred) / S1_pred
         p_Y = 1 / (1 + ratio * pred_or_mean)
+        p_Y = (p_Y + selection_probability) / 2
+        p_Y = (p_Y + selection_probability) / 2
+        p_Y = (p_Y + selection_probability) / 2
+        p_Y = (p_Y + selection_probability) / 2
+        p_Y = selection_probability
         W = 1 / p_Y
         W_s0 = (1 - p_Y) / p_Y
         W_real = 1 / selection_probability
         W_real_s0 = (1 - selection_probability) / selection_probability
         result = torch.cat((p_Y, selection_probability, S1_pred, pred_or_mean), 1)
         result = result[:10, :]
-        # print('\n'.join(' '.join(f"{item:.2f}" for item in row) for row in result))
-        # print(torch.mean((selection_probability - p_Y) ** 2))
+        print('\n'.join(' '.join(f"{item:.2f}" for item in row) for row in result))
+        print(torch.mean((selection_probability - p_Y) ** 2), torch.mean((selection_probability - S1_pred) ** 2))
         
 
         
@@ -323,6 +328,12 @@ class TSSIModel:
         mi_estimator = eval("CLUB")(self.distance_dim, self.distance_dim, self.distance_dim * 2) 
         mi_estimator = mi_estimator.to("cuda:0")
         mi_optimizer = torch.optim.Adam(mi_estimator.parameters(), lr=1e-4) 
+
+        feature = TSSIModel.augment_stage_y1_feature(predicted_treatment_2nd_feature,
+                                                    phi_feature,
+                                                    covariate_2nd_feature,
+                                                    self.add_stage2_intercept)
+        pred_outcome = linear_reg_pred(feature, self.stage2_y1_weight)
 
         for e in range(self.odds_iter):
             # self.covariate_net.train(False)
@@ -385,7 +396,7 @@ class TSSIModel:
         loss_func = nn.BCELoss()
         writer = SummaryWriter()
         self.selection_net.train(True)
-        for e in range(100):
+        for e in range(1000):
             self.selection_opt.zero_grad()
             selection_pred = self.selection_net(torch.cat((treatment, phi, covariate), 1))
             loss_selection = loss_func(selection_pred, selection_1st_d)
